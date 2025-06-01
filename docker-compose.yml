@@ -1,0 +1,32 @@
+version: '3'
+services:
+  postgres:
+    image: ubuntu/postgres:14-22.04_beta
+    environment:
+      - POSTGRES_PASSWORD=Mys3Cr3t
+      - POSTGRES_DB=my_db  # Добавляем имя базы данных
+      - POSTGRES_USER=postgres
+    ports:
+      - 30432:5432
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - my-network
+
+  http_server:
+    image: my_http_server
+    ports:
+      - 89:8080
+    environment:
+      - GAME_DB_URL=postgres://postgres:Mys3Cr3t@postgres:5432/my_db
+    depends_on:
+      - postgres
+    networks:
+      - my-network
+
+networks:
+  my-network:
+    driver: bridge
