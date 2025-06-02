@@ -32,7 +32,7 @@ sudo apt install snapd
 
 sudo snap install docker-compose
 
-### Проверка установки
+## Проверка установки
 
 После установки проверьте доступность для всех пользователей:
 
@@ -67,5 +67,3 @@ docker compose logs -f postgres
 Проверьте создание базы данных
 
 docker compose exec postgres psql -U postgres -c "\l"
-
-
