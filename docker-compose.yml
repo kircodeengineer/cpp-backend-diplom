@@ -23,7 +23,8 @@ services:
     environment:
       - GAME_DB_URL=postgres://postgres:Mys3Cr3t@postgres:5432/my_db
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy  # Добавляем условие готовности
     networks:
       - my-network
 
