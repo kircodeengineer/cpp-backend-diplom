@@ -17,7 +17,7 @@ services:
       - my-network
 
   http_server:
-    image: my_http_server
+    image: ${CI_REGISTRY_IMAGE}/my_http_server:${VERSION}
     ports:
       - 89:8080
     environment:
