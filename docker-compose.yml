@@ -1,4 +1,4 @@
-version: '3'
+version: '3.8'
 services:
   postgres:
     image: ubuntu/postgres:14-22.04_beta
