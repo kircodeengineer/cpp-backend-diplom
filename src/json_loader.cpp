@@ -120,7 +120,7 @@ namespace json_loader {
 				}
 
 				if (loot_type_jason.as_object().if_contains(std::string(model::Literals::COLOR))) {
-					loot_type.color.emplace(loot_type_jason.at(std::string(model::Literals::COLOR)).as_string());
+					loot_type.color = loot_type_jason.at(std::string(model::Literals::COLOR)).as_string();
 				}
 				loot_type.scale = loot_type_jason.at(std::string(model::Literals::SCALE)).as_double();
 				loot_type.value = loot_type_jason.at(std::string(model::Literals::VALUE)).as_int64();
@@ -143,7 +143,7 @@ namespace json_loader {
 
 		// Скорость игрока по-умолчанию
 		if (config_json.as_object().if_contains("defaultDogSpeed")) {
-			game.SetDefaultDogSpeed(config_json.at("defaultDogSpeed").as_double());
+			game.default_dog_speed = config_json.at("defaultDogSpeed").as_double();
 		}
 
 		// Настройки лут-генератора
@@ -151,18 +151,15 @@ namespace json_loader {
 			std::chrono::milliseconds period_ms{
 				static_cast<uint64_t>(config_json.as_object().at("lootGeneratorConfig").as_object().at("period").as_double() * 1000.0) };
 			loot_gen::LootGenerator loot_generator{ period_ms, config_json.as_object().at("lootGeneratorConfig").as_object().at("probability").as_double() };
-			game.SetLootGenerator(std::move(loot_generator));
+			game.loot_generator_ = std::move(loot_generator);
 		}
 
 		// Вместимость рюкзаков по-умолчанию
 		if (config_json.as_object().if_contains("defaultBagCapacity")) {
-			game.SetDefaultBagCapacity(config_json.at("defaultBagCapacity").as_int64());
+			game.default_bag_capacity_ = config_json.at("defaultBagCapacity").as_int64();
 		}
 
-		// Время для отключения игрока
-		if (config_json.as_object().if_contains("dogRetirementTime")) {
-			game.SetDogRetirementTime(config_json.at("dogRetirementTime").as_double());
-		}
+
 		// Добавить карты в игру
 		for (std::size_t i = 0; i < config_json.at(std::string(model::Literals::MAPS)).as_array().size(); ++i) {
 			auto map_json = config_json.at(std::string(model::Literals::MAPS)).as_array().at(i);
@@ -170,11 +167,9 @@ namespace json_loader {
 			model::Map::Id id_map(id_str);
 			std::string name(map_json.at(std::string(model::Literals::NAME)).as_string());
 			model::Map map(id_map, name);
-
+			map.dog_speed = game.default_dog_speed;
 			if (map_json.as_object().if_contains("dogSpeed")) {
-				map.SetDogSpeed(map_json.at("dogSpeed").as_double());
-			} else {
-				map.SetDogSpeed(game.GetDefaultDogSpeed());
+				map.dog_speed = map_json.at("dogSpeed").as_double();
 			}
 			// Дороги
 			AddRoadsOnMap(map_json, map);
@@ -186,10 +181,8 @@ namespace json_loader {
 			AddLootTypesOnMap(map_json, map);
 			// Вместимость на карте
 			if (map_json.as_object().if_contains("bagCapacity")) {
-				map.SetBagCapacity(map_json.at("bagCapacity").as_int64());
+				map.bag_capacity_ = map_json.at("bagCapacity").as_int64();
 			}
-
-
 			game.AddMap(map);
 		}
 	}

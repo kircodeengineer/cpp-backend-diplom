@@ -2,7 +2,6 @@
 #include <boost/asio/signal_set.hpp>
 #include <boost/asio/strand.hpp>
 #include <boost/program_options.hpp>
-#include <pqxx/pqxx>
 #include <iostream>
 #include <optional>
 #include <thread>
@@ -10,8 +9,6 @@
 #include "json_loader.h"
 #include "request_handler.h"
 #include "ticker.h"
-#include "postgres.h"
-
 
 using namespace std::literals;
 namespace net = boost::asio;
@@ -23,14 +20,9 @@ namespace {
 	struct Args {
 		std::string tick_period;
 		bool tick_period_exist{ false };
-		std::string save_state_period;
-		bool save_state_period_exist{ false };
 		std::string config_file_path;
 		std::string static_files_path;
-		std::string state_file_path;
-		bool state_file_exist{ false };
 		bool random_spawn{ false };
-
 	};
 
 	/// @brief Парсинг командной строки разместим в функции ParseCommandLine.
@@ -54,23 +46,19 @@ namespace {
 		desc.add_options()
 			// Опция --help выводит информацию о параметрах командной строки.
 			("help,h", "produce help message")
-			// Опция --tick-period milliseconds задаёт период автоматического обновления игрового состояния в миллисекундах
+			// Опция --tick-period milliseconds задаёт период автоматического
+			// обновления игрового состояния в миллисекундах
 			("tick-period,t",
 				po::value(&args.tick_period)->multitoken()->value_name("milliseconds"s),
 				"set tick period")
-			// Опция --save-state-period milliseconds задаёт период автоматического сохранения состояния сервера
-			("save-state-period,sv", po::value(&args.save_state_period)->multitoken()->value_name("state milliseconds"s),
-				"set save state period")
 			// Опция --config-file задаёт путь к конфигурационному JSON-файлу игры
 			("config-file,c", po::value(&args.config_file_path)->value_name("file"s),
 				"set config file path")
 			// Опция --www-root задаёт путь к каталогу со статическими файлами игры
 			("www-root,w", po::value(&args.static_files_path)->value_name("dir"s),
 				"set static files root")
-			// Опция --state-file задаёт путь к файлу, в который приложение должно сохранять своё состояние в процессе работы, а при старте — восстанавливать.
-			("state-file,st", po::value(&args.state_file_path)->value_name("state file"s),
-				"set state file path")
-			// Опция randomize-spawn-points включает режим, при котором пёс игрока появляется в случайной точке случайно выбранной дороги карты
+			// Опция randomize-spawn-points включает режим, при котором пёс игрока
+			// появляется в случайной точке случайно выбранной дороги карты
 			("randomize-spawn-points", "spawn dogs at random positions");
 
 		// variables_map хранит значения опций после разбора
@@ -95,14 +83,6 @@ namespace {
 
 		if (vm.contains("tick-period"s)) {
 			args.tick_period_exist = true;
-		}
-
-		if (vm.contains("save-state-period"s)) {
-			args.save_state_period_exist = true;
-		}
-
-		if (vm.contains("state-file"s)) {
-			args.state_file_exist = true;
 		}
 
 		if (!vm.contains("config-file"s)) {
@@ -172,36 +152,13 @@ void LogExitServer(int code, std::optional<std::string> exception) {
 int main(int argc, const char* argv[]) {
 	try {
 		auto args = ParseCommandLine(argc, argv);
-
-		const char* db_url = std::getenv("GAME_DB_URL");
-		if (!db_url) {
-			throw std::runtime_error("GAME_DB_URL is not specified");
-		}
-
-		postgres::ConnectionPool connection_pool{ 12, [db_url] { //10
-									 auto conn = std::make_shared<pqxx::connection>(db_url);
-									 return conn;
-								 } };
-
 		// 1. Загружаем карту из файла и построить модель игры
-		model::Game game(connection_pool);
+		model::Game game;
 
 		json_loader::LoadGame(game, args->config_file_path);
 
 		if (args->random_spawn) {
-			game.SetRandomStartPosOn();
-		}
-
-		// Когда сервер запускается без указания пути к файлу с сохранённым состоянием, он должен стартовать с чистого листа. 
-		if (args->state_file_exist) {
-			game.SetStateFilePath(std::string(args->state_file_path));
-			// Когда сервер запускается с указанием пути к существующему файлу состояния, он должен должен восстановить это состояние. 
-			game.DeserilizeState();
-		}
-
-
-		if (args->save_state_period_exist) {
-			game.SetSaveStatePeriod(static_cast<std::chrono::milliseconds>(std::stoi(args->save_state_period)));
+			game.random_start_pos = true;
 		}
 
 		game.SetStaticPath(std::string(args->static_files_path));
@@ -229,6 +186,13 @@ int main(int argc, const char* argv[]) {
 		namespace sys = boost::system;
 		signals.async_wait([&ioc](const sys::error_code& ec,
 			[[maybe_unused]] int signal_number) {
+				// Запустите программу и нажмите Ctrl+C, пока не истекло 30-секундное
+				// ожидание таймера. Программа выведет номер полученного сигнала, а затем
+				// после вызова метода stop завершит метод run, не дожидаясь, пока истечёт
+				// таймер. Программа корректно завершит свою работу — об этом
+				// свидетельствует надпись “Shutting down”. Без использования метода
+				// signal_set::async_wait нажатие Ctrl+C сразу завершило бы работу
+				// программы, не дав ей возможности выполнить завершающие операции.
 				if (!ec) {
 					std::cout << "Signal "sv << signal_number << " received"sv << std::endl;
 					ioc.stop();
@@ -239,7 +203,7 @@ int main(int argc, const char* argv[]) {
 
 		// 4. Создаём обработчик HTTP-запросов и связываем его с моделью игры
 		auto handler = std::make_shared<http_handler::RequestHandler>(
-			game, connection_pool, "lol/kek", net::make_strand(ioc));
+			game, "lol/kek", net::make_strand(ioc));
 
 		// 5. Запустить обработчик HTTP-запросов, делегируя их обработчику запросов
 		const auto address = net::ip::make_address("0.0.0.0");
@@ -261,24 +225,12 @@ int main(int argc, const char* argv[]) {
 
 		// 6. Запускаем обработку асинхронных операций
 		RunWorkers(std::max(1u, num_threads), [&ioc] { ioc.run(); });
-
-		// Когда сервер запускается без указания пути к файлу с сохранённым состоянием, он должен стартовать с чистого листа. 
-		// При получении сигнала о завершении работы сервер не должен создавать никаких файлов.
-		if (args->state_file_exist) {
-			// Когда сервер запускается с указанием пути к отсутствующему файлу состояния, он должен стартовать с чистого листа. 
-			// При получении сигнала о завершении работы сервер должен сохранить состояние в файл.
-
-			// Когда сервер запускается с указанием пути к существующему файлу состояния, он должен должен восстановить это состояние. 
-			// При получении сигнала о завершении работы сервер должен сохранить обновлённое состояние.
-			game.SerilizeState();
-		}
 	}
 	catch (const std::exception& ex) {
 		LogExitServer(EXIT_FAILURE, ex.what());
 		// std::cerr << ex.what() << std::endl;
 		return EXIT_FAILURE;
 	}
-
-	LogExitServer(EXIT_SUCCESS, std::nullopt);
+	LogExitServer(EXIT_FAILURE, std::nullopt);
 	return EXIT_SUCCESS;
 }

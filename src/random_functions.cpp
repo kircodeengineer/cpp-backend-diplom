@@ -3,7 +3,7 @@
 #include <random>
 
 namespace random_functions {
-	std::string RandomHexString(std::size_t length) {
+	std::string random_hex_string(std::size_t length) {
 		const std::string CHARACTERS = "0123456789abcdef";
 		int chars_count = static_cast<int>(CHARACTERS.size());
 		std::random_device random_device;
@@ -19,21 +19,21 @@ namespace random_functions {
 		return random_string;
 	}
 
-	int RandomIntNumber(int from, int to) {
+	int random_int_number(int from, int to) {
 		std::random_device random_device;
 		std::mt19937 generator(random_device());
 		std::uniform_int_distribution<> distribution(from, to);
 		return distribution(generator);
 	}
 
-	int RandomNumberFromZero(int max_num) {
+	int random_number_from_zero(int max_num) {
 		std::random_device random_device;
 		std::mt19937 generator(random_device());
 		std::uniform_int_distribution<> distribution(0, max_num);
 		return distribution(generator);
 	}
 
-	double RandomDoubleNumber(int from, int to) {
+	double random_double_number(int from, int to) {
 		std::random_device random_device;
 		std::mt19937 generator(random_device());
 		std::uniform_real_distribution<> distribution(from, to);

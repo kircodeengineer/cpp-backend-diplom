@@ -2,7 +2,7 @@
 #include <deque>
 #include <list>
 #include <memory>
-#include <boost/serialization/optional.hpp>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -11,17 +11,8 @@
 #include "loot_generator.h"
 #include "tagged.h"
 #include "collision_detector.h"
-#include "postgres.h"
-
-#include <boost/archive/text_oarchive.hpp>
-#include <boost/archive/text_iarchive.hpp>
-#include <boost/serialization/vector.hpp>
-#include <boost/serialization/unordered_map.hpp>
-#include <boost/serialization/deque.hpp>
-#include <boost/serialization/list.hpp>
 
 namespace model {
-
 	class Provider : public collision_detector::ItemGathererProvider {
 	public:
 		using Items = std::vector<collision_detector::Item>;
@@ -155,12 +146,6 @@ namespace model {
 	struct FloatCoord {
 		double x{ 0.0 };
 		double y{ 0.0 };
-
-		template<class Archive>
-		void serialize(Archive& ar, [[maybe_unused]] const unsigned int version) {
-			ar& x;
-			ar& y;
-		}
 	};
 
 
@@ -170,33 +155,22 @@ namespace model {
 		std::string_view name{ LootTypesNames::KEY };
 		std::string_view file{ LootTypesFiles::KEY };
 		std::string_view type{ MapObjTypes::OBJ };
-		boost::optional<uint64_t> rotation;
-		boost::optional<std::string> color;
+		std::optional<uint64_t> rotation;
+		std::optional<std::string> color;
 		double scale{ 0.0 };
-		uint64_t value{ 0 };
+		long long value{ 0 };
 	};
 
 	// лут на карте
 	struct Loot {
 		// целое число, задающее тип объекта в диапазоне [0, N-1], где N — количество различных типов трофеев, заданных в массиве lootTypes на карте.
-		uint64_t type;
+		unsigned int type;
 		FloatCoord coord;
-
-		template<class Archive>
-		void serialize(Archive& ar, [[maybe_unused]] const unsigned int version) {
-			ar& type;
-			ar& coord;
-		}
 	};
 
 	// лут с id
-	struct LootWithId : Loot {
-		uint64_t id{ 0 };
-
-		template<class Archive>
-		void serialize(Archive& ar, [[maybe_unused]] const unsigned int version) {
-			ar& id;
-		}
+	struct LootWithId :Loot {
+		unsigned long long id{ 0 };
 	};
 
 	/// @brief направление перемещения игрока
@@ -300,6 +274,12 @@ namespace model {
 
 	class Map {
 	public:
+		// скорость игрока
+		double dog_speed{ 0 };
+
+		// Вместимость рюкзаков на карте
+		std::optional<unsigned int> bag_capacity_;
+
 		using Id = util::Tagged<std::string, Map>;
 		using Roads = std::vector<Road>;
 		using Buildings = std::vector<Building>;
@@ -331,37 +311,17 @@ namespace model {
 		/// @param loot_type тип лута
 		void AddLootType(const LootType& loot_type);
 
-		/// @brief 
-		/// @return 
 		const LootTypes& GetLootTypes() const noexcept;
 
-		/// @brief 
-		/// @param type 
-		/// @return 
-		uint64_t GetValueByLootType(uint64_t type) const;
+		unsigned int GetValueByLootType(unsigned int type) const;
 
 		/// @brief Получить количество типов лута
 		/// @return количество типов лута
-		uint64_t GetLootTypesCount() const;
-
-		/// @brief установить скорость игрока
-		/// @param dog_speed скорость игрока
-		void SetDogSpeed(double dog_speed);
-
-		/// @brief установить вместимость рюкзака
-		/// @param bag_capcity вместимость рюкзака
-		void SetBagCapacity(uint64_t bag_capcity);
-
-		/// @brief получить значения скорости игрока
-		/// @return скорость игрока
-		double GetDogSpeed() const;
-
-		/// @brief получить вместимость рюкзака на карте
-		/// @return вместимость рюкзака на карте
-		boost::optional<uint64_t> GetBagCapacity() const;
+		unsigned int GetLootTypesCount() const;
 
 	private:
-		using OfficeIdToIndex = std::unordered_map<Office::Id, size_t, util::TaggedHasher<Office::Id>>;
+		using OfficeIdToIndex =
+			std::unordered_map<Office::Id, size_t, util::TaggedHasher<Office::Id>>;
 
 		Id id_;
 		std::string name_;
@@ -371,15 +331,7 @@ namespace model {
 		OfficeIdToIndex warehouse_id_to_index_;
 		Offices offices_;
 		LootTypes loot_types_;
-
-		// скорость игрока
-		double dog_speed_{ 0 };
-
-		// Вместимость рюкзаков на карте
-		boost::optional<uint64_t> bag_capacity_;
 	};
-
-	class Game;
 
 	class Player {
 	public:
@@ -396,13 +348,11 @@ namespace model {
 		Direction direction_{ Direction::NORTH };
 
 		// id
-		uint64_t id_{ 0 };
+		unsigned int id_{ 0 };
 
-		std::string map_name_;
+		std::shared_ptr<const Map> map_;
 
 		std::string name_;
-
-		std::string hash_;
 
 		std::list<LootWithId> bag_;
 
@@ -410,20 +360,12 @@ namespace model {
 		FloatCoord base_pos_;
 
 		// очки
-		uint64_t score_{ 0 };
+		unsigned int score{ 0 };
 
-		// нет движения
-		double no_move_time_{ 0.0 };
-
-		// Покинул ли игрок игру
-		bool is_left_game_{ false };
-
-		// время входа в игру
-		boost::optional<double> join_time_;
 	public:
 		/// @brief перемещение игрока на заданную дистанцию
 		/// @param distance дистанция
-		void MoveOnDistance(Game& game, double distance);
+		void MoveOnDistance(double distance);
 
 		/// @brief Перемещение игрока в заданном направлении до границы дороги и
 		/// изменение значения дистанции для перещения
@@ -431,38 +373,6 @@ namespace model {
 		/// @param distance расстояние для перемещенияя
 		void UpdatePosAndMoveDistanceByRoadBorders(const Road& road,
 			double& distance);
-
-		template<class Archive>
-		void serialize(Archive& ar, [[maybe_unused]] const unsigned int version) {
-			ar& pos_;
-			ar& speed_;
-			ar& direction_;
-			ar& id_;
-			ar& map_name_;
-			ar& name_;
-			ar& hash_;
-			ar& bag_;
-			ar& base_pos_;
-			ar& score_;
-			ar& is_left_game_;
-		}
-	};
-
-	struct GameRepr {
-		std::unordered_map<std::string, uint64_t> hash_to_palyer_id;
-		std::unordered_map<std::string, std::string> hash_to_map_name;
-		std::unordered_map<uint64_t, std::string> palyer_id_to_player_name;
-		std::unordered_map<std::string, std::deque<Player>> map_name_to_players;
-		std::unordered_map<std::string, std::deque<Loot>> map_name_to_loot;
-
-		template<class Archive>
-		void serialize(Archive& ar, [[maybe_unused]] const unsigned int version) {
-			ar& hash_to_palyer_id;
-			ar& hash_to_map_name;
-			ar& palyer_id_to_player_name;
-			ar& map_name_to_players;
-			ar& map_name_to_loot;
-		}
 	};
 
 	class Game {
@@ -476,18 +386,27 @@ namespace model {
 		// Ширина базы
 		constexpr static double BASE_WIDTH{ 0.5 };
 
+		Game() {};
 		using Maps = std::vector<Map>;
+		std::unordered_map<std::string, unsigned int> hash_to_palyer_id_;
+		std::unordered_map<std::string, std::string> hash_to_map_name_;
+		std::unordered_map<unsigned int, std::string> palyer_id_to_player_name_;
 
-		Game(postgres::ConnectionPool& connection_pool) : connection_pool_(connection_pool) {
-			try {
-				auto connection = connection_pool_.GetConnection();
-				postgres::CreateTable(*connection);
-			}
-			catch (...)
-			{
-				throw std::invalid_argument("DataBase init error!");
-			}
-		};
+		std::mutex mtx_map_name_to_players_;
+		std::unordered_map<std::string, std::deque<Player>> map_name_to_players_;
+
+		std::mutex mtx_map_name_to_loot_;
+		std::unordered_map<std::string, std::deque<Loot>> map_name_to_loot_;
+
+		// генератор предметов
+		std::optional<loot_gen::LootGenerator> loot_generator_;
+
+		// Вместимость рюкзаков по-умолчанию
+		unsigned int default_bag_capacity_{ 3 };
+
+		double default_dog_speed{ 1.0 };
+		bool world_auto_update{ false };
+		bool random_start_pos{ false };
 
 		/// @brief Просчёт игрового времени
 		/// @param period_ms интервал просчитыаемого времени
@@ -538,62 +457,6 @@ namespace model {
 		int AddPlayerOnMap(const Map* map, const std::string& map_name,
 			const std::string& hash, const std::string& user_name);
 
-		/// @brief установка значения скорости игрока по-умолчанию
-		/// @param default_bag_capacity скорость игрока по-умолчанию
-		void SetDefaultDogSpeed(double default_dog_speed);
-
-		/// @brief получить скорость игрока по-умолчанию
-		/// @return скорость игрока по-умолчанию
-		double GetDefaultDogSpeed();
-
-		/// @brief установка генератора лута
-		/// @param loot_generator генератор лута
-		void SetLootGenerator(loot_gen::LootGenerator&& loot_generator);
-
-		/// @brief установить значение вместимости рюкзака по-умолчанию
-		/// @param default_bag_capacity значение вместимости рюкзака по-умолчанию
-		void SetDefaultBagCapacity(uint64_t default_bag_capacity);
-
-		/// @brief установить выставку рандомной стартовой позиции
-		void SetRandomStartPosOn();
-
-		/// @brief выполняется ли автообновление мира?
-		/// @return false - нет
-		bool IsWorldAutoUpdate();
-
-		/// @brief сериализация состояния игры
-		void SerilizeState();
-
-		/// @brief десериализация состояния игры
-		void DeserilizeState();
-
-		/// @brief копирование состояния игры под сериализацию
-		/// @param game_repr состояние игры
-		void CopyGame(GameRepr& game_repr);
-
-		/// @brief загрузка состония игры из файла
-		/// @param game_repr состояние игры из файла
-		void LoadGame(const GameRepr& game_repr);
-
-		/// @brief установка пути к файлу с состоянием игры
-		/// @param state_file_path путь к файлу с состоянием игры
-		void SetStateFilePath(std::string state_file_path);
-
-		/// @brief установить период автоматической записи в файл состояния игры 
-		/// @param save_state_period_ms_ период автоматической записи в файл состояния игры
-		void SetSaveStatePeriod(std::chrono::milliseconds save_state_period_ms);
-
-		/// @brief обновляем счёт игрока
-		/// @param player игрок 
-		void UpdatePlayerScore(Player& player);
-
-		/// @brief установить время бездействия
-		/// @param dog_retirement_time время бездействия
-		void SetDogRetirementTime(double dog_retirement_time);
-
-		/// @brief Запись данных о выбывших игроках в БД
-		/// @param left_players выбывшие игроках в БД
-		void WriteDataToDB(const std::vector<postgres::RetiredPlayer>& left_players);
 	private:
 		using MapIdHasher = util::TaggedHasher<Map::Id>;
 		using MapIdToIndex = std::unordered_map<Map::Id, size_t, MapIdHasher>;
@@ -604,52 +467,7 @@ namespace model {
 		// путь к статическим файлам
 		std::string static_path_;
 
-		// путь к статическим файлам
-		boost::optional<std::string> state_file_path_;
-
-		// коллайдер
 		Provider provider_;
-
-		std::unordered_map<std::string, uint64_t> hash_to_palyer_id_;
-		std::mutex mtx_hash_to_map_name_;
-		std::unordered_map<std::string, std::string> hash_to_map_name_;
-		std::unordered_map<uint64_t, std::string> palyer_id_to_player_name_;
-
-		std::mutex mtx_map_name_to_players_;
-		std::unordered_map<std::string, std::deque<Player>> map_name_to_players_;
-
-		std::mutex mtx_map_name_to_loot_;
-		std::unordered_map<std::string, std::deque<Loot>> map_name_to_loot_;
-
-		// генератор предметов
-		boost::optional<loot_gen::LootGenerator> loot_generator_;
-
-		// Вместимость рюкзаков по-умолчанию
-		uint64_t default_bag_capacity_{ 3 };
-
-		// Скорость игрока по-умолчанию
-		double default_dog_speed_{ 1.0 };
-
-		// флаг автоматического обновления состояния игры
-		bool world_auto_update_{ false };
-
-		// флаг рандомной стартовой позиции
-		bool random_start_pos_{ false };
-
-		// период автоматической записи в файл состояния игры 
-		boost::optional<std::chrono::milliseconds> save_state_period_ms_;
-
-		// пул потоков для работы с БД
-		postgres::ConnectionPool& connection_pool_;
-
-		// Время бездействия по достижению которого будет сделана запись в БД
-		double dog_retirement_time_{ 60.0 };
-
-		// Текущее игровое время, сек
-		double current_game_time_{ 0.0 };
-
-		// токены покинувших игру игроков
-		std::deque<std::string> invalid_tokens_;
 	};
 
 }  // namespace model

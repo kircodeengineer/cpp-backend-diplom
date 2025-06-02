@@ -36,7 +36,7 @@ public:
 	}
 
 	collision_detector::Item GetItem(size_t idx) const{
-		return items_.at(idx);
+		return items_[idx];
 	}
 
 	size_t GatherersCount() const{
@@ -44,7 +44,7 @@ public:
 	}
 
 	collision_detector::Gatherer GetGatherer(size_t idx) const{
-		return gatherers.at(idx);
+		return gatherers_[idx];
 	}
 
 	void AddGatherer(collision_detector::Gatherer& new_gath){

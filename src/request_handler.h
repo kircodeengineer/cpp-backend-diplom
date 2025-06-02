@@ -10,7 +10,6 @@
 
 #include "http_server.h"
 #include "model.h"
-#include "postgres.h"
 
 namespace http_handler {
 	using namespace boost::posix_time;
@@ -44,7 +43,6 @@ namespace http_handler {
 		constexpr static std::string_view API_STATE = "/api/v1/game/state"sv;
 		constexpr static std::string_view API_ACTION = "/api/v1/game/player/action"sv;
 		constexpr static std::string_view API_TICK = "/api/v1/game/tick"sv;
-		constexpr static std::string_view API_RECORDS = "/api/v1/game/records"sv;
 	};
 
 	// Структура ContentType задаёт область видимости для констант,
@@ -127,11 +125,6 @@ namespace http_handler {
 		bool keep_alive, http::verb method,
 		std::string_view content_type = ContentType::API_JSON);
 
-	StringResponse MakeRecordsStringResponse(
-		http::status status, std::string_view body, unsigned http_version,
-		bool keep_alive, http::verb method,
-		std::string_view content_type = ContentType::API_JSON);
-
 	// Создаёт FileResponse с заданными параметрами
 	FileResponse MakeStaticFileResponse(http::status status,
 		http::file_body::value_type&& file,
@@ -160,14 +153,13 @@ namespace http_handler {
 	class RequestHandler : public std::enable_shared_from_this<RequestHandler> {
 	private:
 		model::Game& game_;
-		postgres::ConnectionPool& connection_pool_;
 		fs::path root_;
 		Strand api_strand_;
 		std::string ip_{};
 
 	public:
-		explicit RequestHandler(model::Game& game, postgres::ConnectionPool& connection_pool, fs::path root, Strand api_strand)
-			: game_{ game }, connection_pool_(connection_pool), root_{ std::move(root) }, api_strand_{ api_strand } {}
+		explicit RequestHandler(model::Game& game, fs::path root, Strand api_strand)
+			: game_{ game }, root_{ std::move(root) }, api_strand_{ api_strand } {}
 
 		RequestHandler(const RequestHandler&) = delete;
 		RequestHandler& operator=(const RequestHandler&) = delete;
@@ -302,18 +294,6 @@ namespace http_handler {
 		void GenerateTickResponse(const StringRequest& request,
 			StatusAndResponse& response);
 
-		/// @brief генерация ответа на запрос к БД
-		/// @param request
-		/// @return
-		void GenerateRecordsResponse(const StringRequest& request,
-			StatusAndResponse& response);
-
-		/// @brief Запрос к БД
-		/// @param start целое число, задающее номер начального элемента (0 — начальный элемент).
-		/// @param max_items целое число, задающее максимальное количество элементов. Если maxItems превышает 100, должна вернуться ошибка с кодом 400 Bad Request.
-		/// @return body от ответа на запрос
-		std::string GetRecordsFromDB(int start, int max_items);
-
 		using FileRequestResult =
 			std::variant<EmptyResponse, StringResponse, FileResponse>;
 
@@ -378,13 +358,6 @@ namespace http_handler {
 				LogResponse(ip_, request_time, response.http_status,
 					ContentType::API_JSON);
 				return MakeTickStringResponse(response.http_status, response.body,
-					request.version(), request.keep_alive(),
-					request.method(), ContentType::API_JSON);
-			} else if (request.target().find(Literals::API_RECORDS) != std::string::npos) {
-				GenerateRecordsResponse(request, response);
-				LogResponse(ip_, request_time, response.http_status,
-					ContentType::API_JSON);
-				return MakeStringResponse(response.http_status, response.body,
 					request.version(), request.keep_alive(),
 					request.method(), ContentType::API_JSON);
 			} else {

@@ -27,8 +27,6 @@ add_executable(${PROJECT_NAME}
 	src/boost_json.cpp
 	src/json_loader.h
 	src/json_loader.cpp
-	src/postgres.h
-	src/postgres.cpp
 	src/request_handler.cpp
 	src/request_handler.h
 	src/ticker.cpp
@@ -48,8 +46,7 @@ CONAN_PKG::boost)
 
 target_link_libraries(${PROJECT_NAME} 
 ${GAME_SERVER_STATIC_LIB} 
-CONAN_PKG::boost
-CONAN_PKG::libpqxx)
+CONAN_PKG::boost)
 
 target_link_libraries(${GAME_SERVER_TESTS} 
 PRIVATE 

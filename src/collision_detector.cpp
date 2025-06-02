@@ -9,8 +9,7 @@ namespace collision_detector {
 		// пскольку при сборе заказов придётся учитывать перемещение даже на небольшое
 		// расстояние.
 		if (b.x == a.x || b.y == a.y) {
-			return CollectionResult(0, -1);
-			//throw std::invalid_argument("No move");
+			throw std::invalid_argument("No move");
 		}
 		const double u_x = c.x - a.x;
 		const double u_y = c.y - a.y;

@@ -14,7 +14,7 @@ namespace http_handler {
 	/// @brief декодировщик URI строки
 	/// @param s
 	/// @return
-	std::string DecodeUrl(const std::string& s) {
+	std::string decode_url(const std::string& s) {
 		std::string result;
 		for (std::size_t i = 0; i < s.size(); i++) {
 			if (s[i] == '%') {
@@ -23,8 +23,7 @@ namespace http_handler {
 					result.push_back(0xff & v);
 				}
 				catch (...) {
-					throw std::invalid_argument("DecodeUrl error!");
-				}
+				}  // handle error
 				i += 2;
 			} else {
 				result.push_back(s[i]);
@@ -101,15 +100,6 @@ namespace http_handler {
 	}
 
 	StringResponse MakeActionStringResponse(http::status status,
-		std::string_view body,
-		unsigned http_version, bool keep_alive,
-		http::verb method,
-		std::string_view content_type) {
-		return MakeJoinStringResponse(status, body, http_version, keep_alive, method,
-			content_type);
-	}
-
-	StringResponse MakeRecordsStringResponse(http::status status,
 		std::string_view body,
 		unsigned http_version, bool keep_alive,
 		http::verb method,
@@ -354,7 +344,7 @@ namespace http_handler {
 	void RequestHandler::GenerateStaticFileResponse(
 		std::string_view target, StatusAndFileResponse& response) {
 		std::string request_path_str{ target };
-		request_path_str = DecodeUrl(request_path_str);
+		request_path_str = decode_url(request_path_str);
 #ifdef WIN32
 		std::replace(request_path_str.begin(), request_path_str.end(), '/', '\\');
 #endif
@@ -437,7 +427,7 @@ namespace http_handler {
 				response.body = serialize(obj);
 				return;
 			}
-			std::string hash{ random_functions::RandomHexString(32) };
+			std::string hash{ random_functions::random_hex_string(32) };
 			obj["authToken"] = hash;
 			obj["playerId"] = game_.AddPlayerOnMap(map_ptr, map_name, hash, config_json.at("userName"s).as_string().c_str());
 
@@ -545,7 +535,7 @@ namespace http_handler {
 			{"speed", speed},
 			{"dir", model::DirectionToString(player.direction_)} ,
 			{"bag" , bag },
-			{"score" , player.score_ } };
+			{"score" , player.score } };
 		}
 		return players;
 	}
@@ -623,7 +613,7 @@ namespace http_handler {
 		}
 
 		object obj;
-		if (game_.IsWorldAutoUpdate()) {  // game_.IsWorldAutoUpdate()
+		if (game_.world_auto_update) {  // game_.IsWorldAutoUpdate()
 			obj[std::string(model::Literals::CODE)] = "badRequest";
 			obj[std::string(model::Literals::MESSAGE)] = "Invalid endpoint";
 			response.http_status = http::status::bad_request;
@@ -711,58 +701,6 @@ namespace http_handler {
 		response.body = serialize(obj);
 	}
 
-	std::string RequestHandler::GetRecordsFromDB(int start, int max_items) {
-		StringResponse ret;
-		std::vector<postgres::RetiredPlayer > left_players;
-		auto connect_db = connection_pool_.GetConnection();
-		postgres::ReadRetiredFromDatabase(*connect_db, start, max_items, left_players);
-		if (left_players.size() > 0)
-		{
-			array records;
-			for (auto iter = left_players.begin(); iter != left_players.end(); iter++) {
-				object obj;
-				obj["name"] = iter->name;
-				obj["score"] = iter->score;
-				obj["playTime"] = iter->play_time_s;
-				records.push_back(obj);
-			}
-			return serialize(records);
-		}
-		return R"([])"s;
-	}
-
-	void RequestHandler::GenerateRecordsResponse(const StringRequest& request,
-		StatusAndResponse& response) {
-		if (request.target().size() > Literals::API_RECORDS.size() && request.target()[Literals::API_RECORDS.size()] == '?') {
-			std::string str_params(request.target().substr(Literals::API_RECORDS.size() + 1, request.target().size()));
-			int delim_pos = 0;
-
-			auto start_begin = str_params.find('=');
-			++start_begin;
-
-			auto start_end = str_params.find('&');
-			auto digits_count = start_end - start_begin;
-			auto start = str_params.substr(start_begin, digits_count);
-
-			str_params = str_params.substr(start_begin + digits_count);
-			auto max_item_begin = str_params.find('=');
-			++max_item_begin;
-			auto max_item = str_params.substr(max_item_begin);
-
-			int start_digit = std::stoi(start);
-			int max_item_digit = std::stoi(max_item);
-			if (max_item_digit > 100) {
-				return GenerateBadRequestResponse(response);
-			} else {
-				response.http_status = http::status::ok;
-				response.body = GetRecordsFromDB(start_digit, max_item_digit);
-			}
-		} else {
-			response.http_status = http::status::ok;
-			response.body = GetRecordsFromDB(0, 100);
-		}
-	}
-
 	void RequestHandler::GenerateResponse(const StringRequest& request,
 		StatusAndResponse& response) {
 		if (request.target() == Literals::API_MAPS) {
@@ -806,6 +744,5 @@ namespace http_handler {
 		obj[std::string(logger::Literals::MESSAGE)] = "response sent"s;
 		LOG(serialize(obj));
 	}
-
 
 }  // namespace http_handler
