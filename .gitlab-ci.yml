@@ -52,5 +52,5 @@ deploy:
     - docker context create remote --description "remote ssh" --docker "host=ssh://${DEV_USER}@${DEV_HOST}"
   script:
     - docker login -u ${CI_REGISTRY_USER} -p ${CI_REGISTRY_PASSWORD} ${CI_REGISTRY}
-    - docker --context remote rm -f http_server || true
+    - docker --context remote rm -f cpp-backend || true
     - docker --context remote compose up -d --force-recreate
