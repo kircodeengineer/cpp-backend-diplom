@@ -349,7 +349,7 @@ namespace model {
 	}
 
 	/// @brief генерация лута на карте
-	void GenerateLoot(boost::optional<loot_gen::LootGenerator> loot_generator,
+	void GenerateLoot(boost::optional<loot_gen::LootGenerator>& loot_generator,
 		std::chrono::milliseconds period_ms,
 		std::deque<Loot>& loot_on_map,
 		unsigned int players_count,
