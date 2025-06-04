@@ -2,13 +2,16 @@
 #include <stdexcept>
 
 namespace collision_detector {
+	bool AreEqual(double a, double b, double epsilon = 1e-9) {
+    	return std::abs(a - b) < epsilon;
+	}	
 
 	CollectionResult TryCollectPoint(geom::Point2D a, geom::Point2D b, geom::Point2D c) {
 		// Проверим, что перемещение ненулевое.
 		// Тут приходится использовать строгое равенство, а не приближённое,
 		// пскольку при сборе заказов придётся учитывать перемещение даже на небольшое
 		// расстояние.
-		if (b.x == a.x || b.y == a.y) {
+		if (AreEqual(b.x, a.x) && AreEqual(b.y, a.y)) {
 			return CollectionResult(0, -1);
 			//throw std::invalid_argument("No move");
 		}
